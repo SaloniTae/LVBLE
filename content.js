@@ -1611,15 +1611,6 @@ function setupFileAttachment() {
     if (!items.length) {
       return;
     }
-    const value = await new Promise(resolve => chrome.storage.local.get(["lovable_token"], resolve));
-    let value2 = value.lovable_token || "";
-    if (!value2) {
-      showCustomAlert("Error", "Token not captured. Navigate in Lovable to sync.");
-      return;
-    }
-    if (value2.startsWith("Bearer ")) {
-      value2 = value2.slice(7);
-    }
     const handler = async input => {
       const value3 = await input.slice(0, 12).arrayBuffer();
       const value4 = new Uint8Array(value3);
@@ -1653,35 +1644,52 @@ function setupFileAttachment() {
         value5 = value9.file;
         value6 = value9.previewUrl;
       }
-      const value7 = isImageType(value5.type);
-      const value8 = qlAttachedFiles.length;
       qlAttachedFiles.push({
-        file_id: null,
+        file_id: "native_" + crypto.randomUUID(),
         file_name: value3.name,
         previewUrl: value6,
         file_type: value5.type,
         sizeLabel: formatFileSize(value5.size),
-        uploading: true,
+        uploading: false,
+        uploadFailed: false,
         rawFile: value5
       });
       renderAttachPreview();
-      try {
-        const value9 = await uploadFileDirect(value5, value2);
-        qlAttachedFiles[value8].file_id = value9.file_id;
-        qlAttachedFiles[value8].public_url = value9.public_url;
-        qlAttachedFiles[value8].uploading = false;
-        renderAttachPreview();
-      } catch (value9) {
-        console.warn("[QL Upload] Failed to upload to storage:", value9.message);
-        qlAttachedFiles[value8].uploading = false;
-        qlAttachedFiles[value8].uploadFailed = true;
-        renderAttachPreview();
-        showCustomAlert("Upload Error", "Could not upload the image: " + (value9.message || "unknown error"));
-      }
     }
   });
 }
-async function sendNativeToLovable(message) {
+function getLovableFileInput(form) {
+  const root = form || document;
+  const selectors = [
+    'input[type="file"][accept*="image" i]',
+    'input[type="file"][multiple]',
+    'input[type="file"]'
+  ];
+  for (const selector of selectors) {
+    const input = root.querySelector(selector) || document.querySelector(selector);
+    if (input) {
+      return input;
+    }
+  }
+  return null;
+}
+function attachFilesToLovableForm(form, files) {
+  const attachableFiles = (files || []).filter(Boolean);
+  if (!attachableFiles.length) {
+    return false;
+  }
+  const input = getLovableFileInput(form);
+  if (!input) {
+    throw new Error("Lovable attachment input not found. Open the standard Lovable chat and try again.");
+  }
+  const dataTransfer = new DataTransfer();
+  attachableFiles.forEach(file => dataTransfer.items.add(file));
+  input.files = dataTransfer.files;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+async function sendNativeToLovable(message, files) {
   const element = getLovableChatForm();
   if (!element) {
     throw new Error("Lovable chat not found. Open a project.");
@@ -1691,7 +1699,10 @@ async function sendNativeToLovable(message) {
     throw new Error("Chat editor not found on the page.");
   }
   setLovableEditorText(element2, message);
-  await new Promise(resolve => setTimeout(resolve, 300));
+  if (files && files.length) {
+    attachFilesToLovableForm(element, files);
+  }
+  await new Promise(resolve => setTimeout(resolve, files && files.length ? 700 : 300));
   const element3 = await waitForLovableSendButton(element);
   if (!element3) {
     throw new Error("Send button not found. Lovable may still be loading.");
@@ -1722,17 +1733,11 @@ function setupSend() {
       return;
     }
     const filteredItems = qlAttachedFiles.filter(function (item) {
-      return item.public_url && !item.uploading && !item.uploadFailed;
+      return item.rawFile && !item.uploading && !item.uploadFailed;
     });
     const value2 = filteredItems.length > 0;
     var value3 = value;
-    if (value2) {
-      var value4 = filteredItems.map(function (item) {
-        return item.public_url;
-      }).join("\n");
-      var value5 = filteredItems.length > 1 ? "Attached files:\n" : "Attached file: ";
-      value3 = value + "\n\n" + value5 + value4;
-    }
+    const nativeFiles = filteredItems.map(item => item.rawFile);
     try {
       if (element3) {
         element3.className = "ql-log-info";
@@ -1740,7 +1745,7 @@ function setupSend() {
       }
       element.classList.add("ql-sending");
       element.disabled = true;
-      await sendNativeToLovable(value3);
+      await sendNativeToLovable(value3, nativeFiles);
       if (element3) {
         element3.className = "ql-log-success";
         element3.innerText = value2 ? "✓ Prompt sent!" : "✓ Prompt sent!";
@@ -1985,17 +1990,6 @@ async function handleFilesAttach(files) {
     showCustomAlert("Limit", "Maximo " + MAX_FILES + " files.");
     return;
   }
-  var value = await new Promise(function (resolve) {
-    chrome.storage.local.get(["lovable_token"], resolve);
-  });
-  var value2 = value.lovable_token || "";
-  if (!value2) {
-    showCustomAlert("Error", "Token not captured.");
-    return;
-  }
-  if (value2.indexOf("Bearer ") === 0) {
-    value2 = value2.slice(7);
-  }
   for (var count = 0; count < files.length; count++) {
     var value3 = files[count];
     if (qlAttachedFiles.length >= MAX_FILES) {
@@ -2012,28 +2006,17 @@ async function handleFilesAttach(files) {
       value4 = value6.file;
       value5 = value6.previewUrl;
     }
-    var value7 = qlAttachedFiles.length;
     qlAttachedFiles.push({
-      file_id: null,
+      file_id: "native_" + crypto.randomUUID(),
       file_name: value3.name || "file_" + Date.now(),
       previewUrl: value5,
       file_type: value4.type,
       sizeLabel: formatFileSize(value4.size),
-      uploading: true,
+      uploading: false,
+      uploadFailed: false,
       rawFile: value4
     });
     renderAttachPreview();
-    try {
-      var value8 = await uploadFileDirect(value4, value2);
-      qlAttachedFiles[value7].file_id = value8.file_id;
-      qlAttachedFiles[value7].uploading = false;
-      renderAttachPreview();
-    } catch (value9) {
-      qlAttachedFiles[value7].uploading = false;
-      qlAttachedFiles[value7].file_id = "local_direct_" + crypto.randomUUID();
-      qlAttachedFiles[value7].uploadFailed = true;
-      renderAttachPreview();
-    }
   }
   showCustomAlert("Attached 📎", files.length + " file(s) added!");
 }
