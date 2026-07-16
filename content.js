@@ -12,13 +12,7 @@ function activateBypass() {
   }, "*");
 }
 function deactivateBypass() {
-  try {
-    localStorage.removeItem("__ql_bypass_active");
-  } catch (value) {}
-  window.postMessage({
-    type: "qlBypassState",
-    active: false
-  }, "*");
+  activateBypass();
 }
 function buildSessionHeaders(projectId) {
   return new Promise(function (resolve) {
@@ -144,16 +138,27 @@ function euStoreLicenseState(licenseResponse) {
   return value;
 }
 function euApplyActiveBranding() {
-  chrome.storage.local.get(["eu_branding", "ql_branding", "eu_license_status", "ql_license_status"], input => {
+  chrome.storage.local.get(["eu_branding", "ql_branding"], input => {
     const value = input.eu_branding || input.ql_branding || {};
     if (window.EUBackend) {
-      const value2 = input.eu_license_status || input.ql_license_status || "";
-      const options = {
-        ...value
-      };
-      options.statusText = value2;
-      window.EUBackend.applyBranding(document, options);
+      window.EUBackend.applyBranding(document, { ...value, statusText: "" });
+      removeActivationUi(document);
     }
+  });
+}
+function removeActivationUi(root) {
+  const target = root || document;
+  target.querySelectorAll([
+    "#ql-logout-btn",
+    "#ql-trial-countdown",
+    ".ql-status-badge",
+    ".ql-badge-pro-header",
+    ".ql-badge-test",
+    ".ql-badge-pro",
+    ".sp-status-badge",
+    ".sp-badge",
+  ].join(",")).forEach(element => {
+    element.remove();
   });
 }
 function euRenderOperationBlock(element, operations) {
@@ -227,12 +232,10 @@ function createUI() {
   if (document.getElementById("ql-floating")) {
     return;
   }
-  chrome.storage.local.get(["ql_sidebar_mode", "ql_native_chat", "ql_license_valid"], input => {
+  chrome.storage.local.get(["ql_sidebar_mode", "ql_native_chat"], input => {
     if (input.ql_sidebar_mode === true) {
       qlRetryCount = qlRetryDelays.length;
-      if (input.ql_license_valid) {
-        activateBypass();
-      }
+      activateBypass();
       return;
     }
     if (input.ql_native_chat === true) {
@@ -269,10 +272,6 @@ function _buildFloatingUI() {
   element.addEventListener("click", function (event) {
     var value2 = event.target;
     while (value2 && value2 !== element) {
-      if (value2.id === "ql-validate-btn") {
-        validateLicense();
-        return;
-      }
       if (value2.id === "ql-sidepanel-btn") {
         _qlOpenSidePanel();
         return;
@@ -280,7 +279,7 @@ function _buildFloatingUI() {
       value2 = value2.parentElement;
     }
   });
-  chrome.storage.local.get(["ql_license_valid", "ql_license_key", "eu_license_valid", "eu_license_key", "eu_user_name", "eu_expires_at", "eu_activated_at", "eu_license_status", "eu_session_id", "ql_minimized", "ql_height", "ql_dark_mode", "ql_user_name", "ql_expires_at", "ql_activated_at", "ql_license_status", "ql_session_id"], async input => {
+  chrome.storage.local.get(["ql_minimized", "ql_height", "ql_dark_mode", "eu_user_name", "ql_user_name"], async input => {
     qlMinimized = input.ql_minimized || false;
     qlHeight = input.ql_height || 520;
     if (input.ql_dark_mode === false) {
@@ -289,166 +288,24 @@ function _buildFloatingUI() {
     if (qlMinimized) {
       element.classList.add("ql-minimized");
     }
-    const value2 = input.eu_license_key || input.ql_license_key;
-    const value3 = input.eu_license_valid || input.ql_license_valid;
-    if (value3) {
-      activateBypass();
-    }
     qlDeviceId = await getDeviceId();
-    const value4 = await new Promise(resolve => chrome.storage.local.get(["ql_sidebar_mode"], resolve));
-    if (value4.ql_sidebar_mode === true) {
-      if (value3) {
-        activateBypass();
-      }
-      return;
-    }
-    if (value3) {
-      qlUserName = input.eu_user_name || input.ql_user_name || null;
-      qlExpiresAt = input.eu_expires_at || input.ql_expires_at || null;
-      qlActivatedAt = input.eu_activated_at || input.ql_activated_at || null;
-      qlLicenseStatus = input.eu_license_status || input.ql_license_status || null;
-      qlSessionId = input.eu_session_id || input.ql_session_id || null;
-      showMainUI(element);
-      activateBypass();
-      euApplyActiveBranding();
-      if (value2 && Date.now() - _qlLastStartupHb > 5000) {
-        _qlLastStartupHb = Date.now();
-        const handler = input2 => {
-          const options = {
-            heartbeat: true,
-            deviceId: qlDeviceId
-          };
-          window.EUBackend.validateLicense(value2, options).then(error => {
-            console.log("[EU] Startup heartbeat (attempt " + input2 + "):", JSON.stringify(error));
-            if (error.valid) {
-              chrome.storage.local.set(euStoreLicenseState(error));
-              activateBypass();
-              const element2 = document.querySelector(".ql-profile-name");
-              if (element2) {
-                element2.textContent = qlUserName || "User";
-              }
-              updateTrialCountdown();
-              euApplyActiveBranding();
-              const element3 = document.getElementById("ql-floating");
-              if (element3) {
-                euCheckOperationBlock(element3);
-              }
-              euMaybeShowOptionalUpgrade(error.operations);
-            } else if (error.reason === "device_conflict") {
-              if (input2 < 2) {
-                setTimeout(() => handler(input2 + 1), 5000);
-                return;
-              }
-              chrome.storage.local.remove(window.EUBackend.clearKeys());
-              deactivateBypass();
-              const element2 = document.getElementById("ql-floating");
-              if (element2) {
-                showLicenseGate(element2);
-              }
-              setTimeout(() => showCustomAlert("Access Denied", error.message), 500);
-            } else if (error.reason === "rate_limited") {
-              if (input2 < 2) {
-                setTimeout(() => handler(input2 + 1), 30000);
-                return;
-              }
-            } else {
-              chrome.storage.local.remove(window.EUBackend.clearKeys());
-              deactivateBypass();
-              const element2 = document.getElementById("ql-floating");
-              if (element2) {
-                showLicenseGate(element2);
-              }
-            }
-          }).catch(() => {
-            if (input2 < 2) {
-              setTimeout(() => handler(input2 + 1), 10000);
-            }
-          });
-        };
-        handler(1);
-      }
-    } else {
-      deactivateBypass();
-      showLicenseGate(element);
-    }
+    qlUserName = input.eu_user_name || input.ql_user_name || "User";
+    qlExpiresAt = null;
+    qlActivatedAt = null;
+    qlLicenseStatus = "active";
+    qlSessionId = "local";
+    activateBypass();
+    showMainUI(element);
+    euApplyActiveBranding();
     setupDrag();
     setupResize();
   });
 }
-function showLicenseGate(element) {
-  element.innerHTML = templateLicenseGate(qlMinimized);
-  setTimeout(() => {
-    const element2 = document.getElementById("ql-buy-license-btn");
-    if (element2) {
-      element2.addEventListener("click", () => window.open("https://lovable.dev", "_blank", "noopener,noreferrer"));
-    }
-    setupMinimize();
-  }, 50);
-}
-async function validateLicense() {
-  const element = document.getElementById("ql-license-input");
-  const element2 = document.getElementById("ql-license-log");
-  const value = element ? element.value.trim().toUpperCase() : "";
-  if (!value) {
-    if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "⚠ Enter a key";
-    }
-    return;
-  }
-  if (element2) {
-    element2.className = "ql-log-info";
-    element2.innerHTML = SVG_ICONS.clock + " Validating...";
-  }
-  try {
-    if (!qlDeviceId) {
-      qlDeviceId = await getDeviceId();
-    }
-    const options = {
-      deviceId: qlDeviceId
-    };
-    const value2 = await window.EUBackend.validateLicense(value, options);
-    if (value2.valid) {
-      qlExpiredHandled = false;
-      const value3 = euStoreLicenseState(value2);
-      chrome.storage.local.set(value3, () => {
-        activateBypass();
-        if (element2) {
-          element2.className = "ql-log-success";
-          element2.innerText = "✓ " + value2.message;
-        }
-        try {
-          if (typeof QLSounds !== "undefined") {
-            QLSounds.activation();
-          }
-        } catch (value4) {}
-        setTimeout(() => {
-          const element3 = document.getElementById("ql-floating");
-          if (element3) {
-            if (!euRenderOperationBlock(element3, value2.operations)) {
-              showMainUI(element3);
-            }
-            euApplyActiveBranding();
-            euMaybeShowOptionalUpgrade(value2.operations);
-          }
-          startHeartbeat(value);
-        }, 800);
-      });
-    } else if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "✗ " + value2.message;
-    }
-  } catch (value2) {
-    if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "✗ Connection error";
-    }
-  }
-}
 function showMainUI(element) {
   const value = qlUserName || "User";
-  const value2 = String(qlLicenseStatus).toLowerCase() === "trial" ? "<span class=\"ql-status-badge ql-badge-test\">TEST</span>" : "<span class=\"ql-status-badge ql-badge-pro\">ACTIVE</span>";
+  const value2 = "";
   element.innerHTML = templateMainUI(value, value2, qlMinimized);
+  removeActivationUi(element);
   euCheckOperationBlock(element);
   element.style.height = qlHeight + "px";
   setTimeout(() => {
@@ -459,7 +316,7 @@ function showMainUI(element) {
     setupMinimize();
     setupSuggestionChips();
     setupWatermarkButton();
-    updateTrialCountdown();
+    removeActivationUi(element);
     setupDrag();
     setupResize();
     setupDarkMode();
@@ -476,35 +333,12 @@ function showMainUI(element) {
     setupDownloadProject();
     checkForUpdatePopup();
     checkResellerRolePopup();
-    chrome.storage.local.get(["eu_license_key", "eu_session_id", "ql_license_key", "ql_session_id"], input => {
-      const value3 = input.eu_license_key || input.ql_license_key;
-      if (value3) {
-        qlSessionId = input.eu_session_id || input.ql_session_id || qlSessionId;
-        startHeartbeat(value3);
-      }
-    });
+    qlSessionId = qlSessionId || "local";
     var element2 = document.getElementById("ql-sidepanel-btn");
     if (element2) {
       element2.addEventListener("click", function (event) {
         event.stopPropagation();
         _qlOpenSidePanel();
-      });
-    }
-    const element3 = document.getElementById("ql-logout-btn");
-    if (element3) {
-      element3.addEventListener("click", () => {
-        if (qlHeartbeatInterval) {
-          clearInterval(qlHeartbeatInterval);
-        }
-        chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-          deactivateBypass();
-          qlUserName = null;
-          qlExpiresAt = null;
-          qlActivatedAt = null;
-          qlLicenseStatus = null;
-          qlSessionId = null;
-          showLicenseGate(element);
-        });
       });
     }
   }, 30);
@@ -775,47 +609,9 @@ function setupWatermarkButton() {
   });
 }
 function updateTrialCountdown() {
-  if (!qlExpiresAt) {
-    return;
-  }
-  const element = document.getElementById("ql-trial-countdown");
-  if (!element) {
-    return;
-  }
-  element.style.display = "block";
-  const value = Date.now();
-  function value2() {
-    const value3 = new Date(qlExpiresAt).getTime();
-    const value4 = Math.max(value3 - value, 3600000);
-    const value5 = value3 - Date.now();
-    if (value5 <= 0) {
-      element.innerHTML = "<span class=\"ql-countdown-expired\">" + t("countdown.expired") + "</span><div class=\"ql-trial-bar\"><div class=\"ql-trial-bar-fill ql-bar-expired\" style=\"width:0%\"></div></div>";
-      handleLicenseExpired();
-      return;
-    }
-    const value6 = Math.floor(value5 / 86400000);
-    const value7 = Math.floor(value5 % 86400000 / 3600000);
-    const value8 = Math.floor(value5 % 3600000 / 60000);
-    const value9 = Math.floor(value5 % 60000 / 1000);
-    const value10 = Math.max(0, Math.min(100, value5 / value4 * 100));
-    let text = "";
-    if (value6 > 0) {
-      text = value6 + "d " + value7 + "h " + value8 + "m";
-    } else if (value7 > 0) {
-      text = value7 + "h " + value8 + "m " + String(value9).padStart(2, "0") + "s";
-    } else {
-      text = value8 + ":" + String(value9).padStart(2, "0");
-    }
-    const value11 = value10 < 20 ? " ql-bar-urgent" : "";
-    const value12 = qlLicenseStatus === "trial" ? t("countdown.trial") : t("countdown.license");
-    element.innerHTML = "<div class=\"ql-countdown-row\"><span class=\"ql-countdown-icon\">" + SVG_ICONS.clock + "</span><span class=\"ql-countdown-label\">" + value12 + "</span><span class=\"ql-countdown-time\">" + text + "</span></div><div class=\"ql-trial-bar\"><div class=\"ql-trial-bar-fill" + value11 + "\" style=\"width:" + value10 + "%\"></div></div>";
-  }
-  value2();
-  if (window.qlCountdownInterval) {
-    clearInterval(window.qlCountdownInterval);
-  }
-  window.qlCountdownInterval = setInterval(value2, 1000);
+  removeActivationUi(document);
 }
+
 function setupMinimize() {
   const element = document.getElementById("ql-minimize");
   if (!element) {
@@ -1036,113 +832,16 @@ function removeShieldOverlay() {
 let qlHbConflictCount = 0;
 let qlHbNetworkFailCount = 0;
 function startHeartbeat(licenseKey) {
-  if (qlHeartbeatInterval) {
-    clearInterval(qlHeartbeatInterval);
-  }
-  qlHbConflictCount = 0;
-  qlHbNetworkFailCount = 0;
-  qlHeartbeatInterval = setInterval(async () => {
-    try {
-      const options = {
-        heartbeat: true,
-        deviceId: qlDeviceId
-      };
-      const value = await window.EUBackend.validateLicense(licenseKey, options);
-      if (!value.valid) {
-        const value2 = value.reason === "device_conflict";
-        const value3 = value.reason === "expired" || value.reason === "suspended" || value.message && (value.message.includes("expired") || value.message.includes("suspended"));
-        if (value2) {
-          qlHbConflictCount++;
-          if (qlHbConflictCount < 2) {
-            return;
-          }
-        }
-        if (value2 || value3) {
-          clearInterval(qlHeartbeatInterval);
-          deactivateBypass();
-          chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-            const element3 = document.getElementById("ql-floating");
-            if (element3) {
-              showLicenseGate(element3);
-            }
-            if (value2) {
-              setTimeout(() => showCustomAlert("Access Denied", value.message), 500);
-            }
-          });
-        }
-        return;
-      }
-      qlHbConflictCount = 0;
-      qlHbNetworkFailCount = 0;
-      activateBypass();
-      qlOnlineCount = value.online_count || 0;
-      const element = document.getElementById("ql-online-count");
-      if (element) {
-        element.textContent = qlOnlineCount;
-      }
-      chrome.storage.local.set(euStoreLicenseState(value));
-      const element2 = document.getElementById("ql-floating");
-      if (element2 && euRenderOperationBlock(element2, value.operations)) {
-        return;
-      }
-      euApplyActiveBranding();
-      euMaybeShowOptionalUpgrade(value.operations);
-      if (value.user_name) {
-        qlUserName = value.user_name;
-        const options2 = {
-          ql_user_name: qlUserName
-        };
-        chrome.storage.local.set(options2);
-        const element3 = document.querySelector(".ql-profile-name");
-        if (element3) {
-          element3.textContent = value.user_name;
-        }
-      }
-    } catch (value) {
-      console.warn("[QL] Heartbeat error", value);
-      qlHbNetworkFailCount++;
-      if (qlHbNetworkFailCount >= 5) {
-        deactivateBypass();
-        qlHbNetworkFailCount = 0;
-      }
-    }
-  }, 60000);
+  activateBypass();
 }
+
 let qlExpiredHandled = false;
 function handleLicenseExpired() {
-  if (qlExpiredHandled) {
-    return;
-  }
-  qlExpiredHandled = true;
-  if (qlHeartbeatInterval) {
-    clearInterval(qlHeartbeatInterval);
-  }
-  if (window.qlCountdownInterval) {
-    clearInterval(window.qlCountdownInterval);
-  }
-  const element = document.createElement("div");
-  element.className = "ql-sweetalert-overlay";
-  element.innerHTML = templateExpiredOverlay();
-  const element2 = document.getElementById("ql-floating");
-  if (element2) {
-    element2.appendChild(element);
-  }
-  requestAnimationFrame(() => element.classList.add("ql-sweetalert-visible"));
-  const element3 = element.querySelector("#ql-sweetalert-close");
-  if (element3) {
-    element3.addEventListener("click", () => {
-      element.classList.remove("ql-sweetalert-visible");
-      setTimeout(() => {
-        element.remove();
-        chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-          if (element2) {
-            showLicenseGate(element2);
-          }
-        });
-      }, 300);
-    });
-  }
+  qlExpiredHandled = false;
+  qlExpiresAt = null;
+  activateBypass();
 }
+
 function qlBootstrap() {
   if (document.getElementById("ql-floating")) {
     return;
