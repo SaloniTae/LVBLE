@@ -1,0 +1,294 @@
+// ==UserScript==
+// @name         127HUB Netflix Extension Debugger (Bare Metal Stealth)
+// @namespace    http://tampermonkey.net/
+// @version      2.0
+// @description  Exact architectural clone of Lovable Analyzer to bypass Netflix page-break.
+// @author       Researcher
+// @match        https://*.netflix.com/*
+// @match        https://netflix.com/*
+// @run-at       document-start
+// @grant        none
+// ==/UserScript==
+
+(function() {
+    'use strict';
+
+    // --- 0. HOOK JSON.STRINGIFY (The Silver Bullet - Exact match to script.js) ---
+    const nativeStringify = JSON.stringify;
+    JSON.stringify = function(value, replacer, space) {
+        const result = nativeStringify.apply(this, arguments);
+        try {
+            if (typeof result === 'string' && (result.includes('operationName') || result.includes('persistedQuery') || (!result.includes('x-netflix') && result.includes('inputFields')))) {
+                const stackTrace = new Error().stack;
+                logEvent("[EXTENSION PAYLOAD]", "GraphQL_Stringify_Intercepted", {
+                    origin_url: window.location.href,
+                    parsed_payload: tryParseJSON(result),
+                    raw_payload: result.length > 1500 ? result.substring(0, 1500) + "... [Truncated]" : result,
+                    call_stack: stackTrace,
+                    explanation: "Caught GraphQL payload being stringified by the extension injection."
+                });
+            }
+        } catch (e) {}
+        return result;
+    };
+
+    window.mobileCapturedLogs = []; // In-memory ONLY, to prevent localStorage crashes
+    let liveConsole, logContainer, uiInjected = false;
+
+    // --- HELPER: Get exact CSS Path for location ---
+    function getCssPath(el) {
+        if (!(el instanceof Element)) return "Unknown";
+        let path = [];
+        while (el.nodeType === Node.ELEMENT_NODE) {
+            let selector = el.nodeName.toLowerCase();
+            if (el.id) {
+                selector += '#' + el.id;
+                path.unshift(selector);
+                break;
+            } else {
+                let sib = el, nth = 1;
+                while (sib = sib.previousElementSibling) {
+                    if (sib.nodeName.toLowerCase() == selector) nth++;
+                }
+                if (nth != 1) selector += ":nth-of-type("+nth+")";
+            }
+            path.unshift(selector);
+            el = el.parentNode;
+        }
+        return path.join(" > ");
+    }
+
+    // --- HELPER: Clean JSON parsing ---
+    function tryParseJSON(str) {
+        try {
+            return JSON.parse(str);
+        } catch (e) {
+            return str;
+        }
+    }
+
+    // --- 1. BUILD THE UI CONSOLE (Exact match to script.js styling architecture) ---
+    function initLiveConsole() {
+        if (document.getElementById('hub127-stealth-console')) return;
+
+        liveConsole = document.createElement('div');
+        liveConsole.id = 'hub127-stealth-console';
+        liveConsole.style.cssText = `
+            position: fixed; top: 10px; right: 10px; width: 340px; height: 400px;
+            background: rgba(10, 14, 10, 0.96); border: 2px solid #e50914; border-radius: 8px;
+            z-index: 2147483647; display: flex; flex-direction: column;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.85); resize: both; overflow: hidden;
+        `;
+
+        const header = document.createElement('div');
+        header.style.cssText = `
+            background: #e50914; color: #fff; padding: 10px; font-weight: bold; font-family: sans-serif;
+            font-size: 12px; text-align: center; cursor: move; user-select: none; touch-action: none;
+        `;
+        header.innerText = '☰ 127HUB DEBUGGER (Drag to Move)';
+
+        logContainer = document.createElement('div');
+        logContainer.style.cssText = `
+            flex-grow: 1; overflow-y: auto; padding: 12px; color: #00FF66;
+            font-family: monospace; font-size: 11px; word-wrap: break-word;
+        `;
+
+        const footer = document.createElement('div');
+        footer.style.cssText = `display: flex; border-top: 1px solid #e50914; background: #111;`;
+
+        const btnSave = document.createElement('button');
+        btnSave.innerText = '📊 Save Logs';
+        btnSave.style.cssText = 'flex: 1; padding: 12px; background: #00E5FF; border: none; font-weight: bold; color: #000; cursor: pointer;';
+        btnSave.onclick = () => {
+            if (!window.mobileCapturedLogs.length) return alert("Logs are empty!");
+            const url = URL.createObjectURL(new Blob([JSON.stringify(window.mobileCapturedLogs, null, 2)], { type: 'text/plain' }));
+            const a = document.createElement('a'); a.href = url; a.download = `hub127_stealth_log_${Date.now()}.json`;
+            a.click(); URL.revokeObjectURL(url);
+        };
+
+        const btnClear = document.createElement('button');
+        btnClear.innerText = '🗑️ Clear';
+        btnClear.style.cssText = 'flex: 1; padding: 12px; background: #FF3333; border: none; font-weight: bold; color: #FFF; cursor: pointer;';
+        btnClear.onclick = () => {
+            window.mobileCapturedLogs = [];
+            logContainer.innerHTML = '';
+        };
+
+        footer.appendChild(btnSave);
+        footer.appendChild(btnClear);
+        liveConsole.appendChild(header);
+        liveConsole.appendChild(logContainer);
+        liveConsole.appendChild(footer);
+        document.documentElement.appendChild(liveConsole);
+
+        // --- DRAG CONTROLS ---
+        let isDragging = false, currentX, currentY, initialX, initialY, xOffset = 0, yOffset = 0;
+        function dragStart(e) {
+            initialX = (e.type === "touchstart" ? e.touches[0].clientX : e.clientX) - xOffset;
+            initialY = (e.type === "touchstart" ? e.touches[0].clientY : e.clientY) - yOffset;
+            if (e.target === header) isDragging = true;
+        }
+        function dragEnd() { initialX = currentX; initialY = currentY; isDragging = false; }
+        function drag(e) {
+            if (!isDragging) return;
+            e.preventDefault();
+            currentX = (e.type === "touchmove" ? e.touches[0].clientX : e.clientX) - initialX;
+            currentY = (e.type === "touchmove" ? e.touches[0].clientY : e.clientY) - initialY;
+            xOffset = currentX; yOffset = currentY;
+            liveConsole.style.transform = `translate3d(${currentX}px, ${currentY}px, 0)`;
+        }
+        header.addEventListener("touchstart", dragStart, { passive: false });
+        header.addEventListener("touchend", dragEnd, false);
+        header.addEventListener("touchmove", drag, { passive: false });
+        header.addEventListener("mousedown", dragStart, false);
+        document.addEventListener("mouseup", dragEnd, false);
+        document.addEventListener("mousemove", drag, false);
+    }
+
+    function printToScreen(category, action, details) {
+        if (!logContainer) return;
+
+        let preview = "Check export for details...";
+        if (details && details.text) preview = details.text;
+        else if (details && details.raw_payload) preview = typeof details.raw_payload === 'string' ? details.raw_payload.substring(0, 100) + "..." : "[Object]";
+        else if (details && details.url) preview = details.url;
+        else if (typeof details === 'object') preview = JSON.stringify(details).substring(0, 100) + "...";
+
+        const logLine = document.createElement('div');
+        logLine.style.cssText = "border-bottom: 1px solid rgba(0,255,102,0.15); padding: 5px 0;";
+
+        if (category.includes("EXTENSION")) { logLine.style.color = "#FF00FF"; logLine.style.fontWeight = "bold"; }
+        else if (category.includes("FETCH")) { logLine.style.color = "#00E5FF"; }
+        else if (category.includes("DOM")) { logLine.style.color = "#FFEA00"; }
+
+        logLine.textContent = `[${category}] ${action} -> ${preview}`;
+        logContainer.appendChild(logLine);
+        logContainer.scrollTop = logContainer.scrollHeight;
+    }
+
+    function logEvent(category, action, details) {
+        window.mobileCapturedLogs.push({ timestamp: new Date().toISOString(), category, action, details });
+        printToScreen(category, action, details);
+    }
+
+    // --- 2. SAFE ES6 PROXY FOR FETCH (Exact match to script.js logic flow) ---
+    window.fetch = new Proxy(window.fetch, {
+        apply(target, thisArg, argArray) {
+            try {
+                const url = typeof argArray[0] === 'string' ? argArray[0] : (argArray[0]?.url || '');
+                const options = argArray[1] || {};
+
+                let headers = {};
+                if (options.headers) {
+                    if (options.headers instanceof Headers) options.headers.forEach((v, k) => headers[k] = v);
+                    else if (Array.isArray(options.headers)) options.headers.forEach(([k, v]) => headers[k] = v);
+                    else headers = options.headers;
+                }
+
+                // Check for extension specific activity
+                const isNetflixGraphQL = url.includes('/graphql') || url.includes('graphql');
+                const hasNetflixHeaders = Object.keys(headers).some(k => k.toLowerCase().startsWith('x-netflix'));
+
+                if (isNetflixGraphQL || hasNetflixHeaders) {
+                    let bodyData = {};
+                    let rawBody = "";
+                    if (options.body) {
+                        rawBody = options.body;
+                        if (typeof options.body === 'string') {
+                            bodyData = tryParseJSON(options.body);
+                        }
+                    }
+
+                    const stackTrace = new Error().stack;
+                    logEvent(hasNetflixHeaders ? "[EXTENSION PAYLOAD]" : "[FETCH]", "GraphQL_Send_Intercepted", {
+                        origin_url: window.location.href,
+                        target_url: url,
+                        headers: headers,
+                        parsed_payload: bodyData,
+                        raw_payload: rawBody,
+                        call_stack: stackTrace
+                    });
+                }
+            } catch (e) { } // Silent fail to protect page load
+            return Reflect.apply(target, thisArg, argArray);
+        }
+    });
+
+    // --- 3. SAFE ES6 PROXY FOR WEBSOCKET ---
+    window.WebSocket = new Proxy(window.WebSocket, {
+        construct(target, argArray) {
+            logEvent("NETWORK", "WS_Opened", { url: argArray[0] });
+            const ws = Reflect.construct(target, argArray);
+
+            ws.send = new Proxy(ws.send, {
+                apply(sendTarget, sendThisArg, sendArgArray) {
+                    const rawData = sendArgArray[0];
+                    const parsedData = tryParseJSON(rawData);
+
+                    logEvent("NETWORK", "WS_Sent", parsedData);
+                    return Reflect.apply(sendTarget, sendThisArg, sendArgArray);
+                }
+            });
+
+            ws.addEventListener('message', (event) => {
+                const parsedRx = tryParseJSON(event.data);
+                logEvent("NETWORK", "WS_Received", parsedRx);
+            });
+
+            return ws;
+        }
+    });
+
+    // --- 4. ASYNCHRONOUS MUTATION OBSERVER ---
+    const domObserver = new MutationObserver((mutations) => {
+        setTimeout(() => {
+            for (let i = 0; i < mutations.length; i++) {
+                const addedNodes = mutations[i].addedNodes;
+                for (let j = 0; j < addedNodes.length; j++) {
+                    const node = addedNodes[j];
+                    if (node.nodeType === Node.ELEMENT_NODE && !node.id?.includes('hub127')) {
+                        let rawHTML = node.outerHTML || "No HTML available";
+                        if (rawHTML.length > 1500) rawHTML = rawHTML.substring(0, 1500) + "... [Truncated]";
+
+                        logEvent("DOM", "HTML_Added", {
+                            tag: node.tagName.toLowerCase(),
+                            injected_into_location: getCssPath(node.parentElement),
+                            exact_html_injected: rawHTML
+                        });
+                    }
+                }
+            }
+        }, 0);
+    });
+
+
+    // --- 4.5 PASSIVE CLICK LISTENER ---
+    window.addEventListener('click', function(event) {
+        // Ignore clicks inside our custom debug console
+        if (event.target.closest('#hub127-stealth-console')) return;
+
+        let el = event.target;
+        // Grab the text of the button, or fallback to aria-labels for icons
+        let readableText = el.innerText?.trim() || el.getAttribute('aria-label') || el.getAttribute('title') || "Icon / No Text";
+
+        logEvent("UI", "User_Tapped", {
+            tag: el.tagName.toLowerCase(),
+            text: readableText.substring(0, 50),
+            location_path: getCssPath(el)
+        });
+    }, true);
+
+
+
+
+    // --- 5. INITIALIZE BOOTSTRAP ---
+    function forceInjectUI() {
+        if (uiInjected) return;
+        if (!document.body) { setTimeout(forceInjectUI, 50); return; }
+        initLiveConsole();
+        domObserver.observe(document.body, { childList: true, subtree: true });
+        uiInjected = true;
+    }
+    forceInjectUI();
+
+})();
