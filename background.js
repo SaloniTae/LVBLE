@@ -5,17 +5,7 @@ function _syncPanelClick(param1) {
     })
     .catch(() => {});
 }
-chrome.storage.local.get(["eu_license_valid", "ql_license_valid"], (param2) => {
-  _syncPanelClick(param2.eu_license_valid || param2.ql_license_valid);
-});
-chrome.storage.onChanged.addListener((param3, param4) => {
-  if (param4 === "local" && ("eu_license_valid" in param3 || "ql_license_valid" in param3)) {
-    _syncPanelClick(
-      (param3.eu_license_valid && param3.eu_license_valid.newValue) ||
-        (param3.ql_license_valid && param3.ql_license_valid.newValue),
-    );
-  }
-});
+_syncPanelClick(true);
 chrome.action.onClicked.addListener((param5) => {
   chrome.sidePanel
     .open({
@@ -44,9 +34,7 @@ chrome.action.onClicked.addListener((param5) => {
           });
       }
     });
-  chrome.storage.local.get(["eu_license_valid", "ql_license_valid"], (param8) => {
-    _syncPanelClick(param8.eu_license_valid || param8.ql_license_valid);
-  });
+  _syncPanelClick(true);
 });
 chrome.runtime.onMessage.addListener((param9, param10, param11) => {
   if (param9 && param9.action === "lovableSync") {
@@ -61,23 +49,7 @@ chrome.runtime.onMessage.addListener((param9, param10, param11) => {
       chrome.storage.local.set(config1, () => {
         console.log("[Background] saved:", Object.keys(config1).join(", "));
       });
-      chrome.storage.local.get(["eu_license_key", "ql_license_key"], (items) => {
-        const licenseKey = items.eu_license_key || items.ql_license_key || "";
-        if (!licenseKey) return;
-        fetch("https://io.eklas.dev/api/v1/lovable/session", {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            licenseKey,
-            token: param9.token || "",
-            projectId: param9.projectId || "",
-          }),
-        }).catch((error) => {
-          console.warn("[Background] lovable session sync failed:", error && error.message);
-        });
-      });
+      // Keep Lovable session data local only.
     }
   }
   if (param9 && param9.action === "activateSidebar") {
@@ -95,9 +67,7 @@ chrome.runtime.onMessage.addListener((param9, param10, param11) => {
     chrome.storage.local.set({
       ql_sidebar_mode: true,
     });
-    chrome.storage.local.get(["eu_license_valid", "ql_license_valid"], (param12) => {
-      _syncPanelClick(param12.eu_license_valid || param12.ql_license_valid);
-    });
+    _syncPanelClick(true);
     param11({
       ok: true,
     });
@@ -107,9 +77,7 @@ chrome.runtime.onMessage.addListener((param9, param10, param11) => {
     chrome.storage.local.set({
       ql_sidebar_mode: false,
     });
-    chrome.storage.local.get(["eu_license_valid", "ql_license_valid"], (param13) => {
-      _syncPanelClick(param13.eu_license_valid || param13.ql_license_valid);
-    });
+    _syncPanelClick(true);
     param11({
       ok: true,
     });
