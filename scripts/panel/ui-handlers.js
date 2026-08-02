@@ -34,11 +34,9 @@ class ModernUIHandlers {
       requestBtn.addEventListener('click', () => this.handleRequestOTP());
     }
 
-    // Main UI Buttons
-    document.getElementById('btn-new')?.addEventListener('click', () => this.handleNew());
-    document.getElementById('btn-recent')?.addEventListener('click', () => this.handleRecent());
+    // Main UI Buttons. Primary Lovable actions are wired in handlers.js;
+    // avoid double-binding placeholder handlers here.
     document.getElementById('btn-templates')?.addEventListener('click', () => this.handleTemplates());
-    document.getElementById('btn-settings')?.addEventListener('click', () => this.handleSettings());
     document.getElementById('btn-admin')?.addEventListener('click', () => this.handleAdmin());
     document.getElementById('btn-discord')?.addEventListener('click', () => this.handleDiscord());
     document.getElementById('btn-logout')?.addEventListener('click', () => this.handleLogout());
@@ -172,8 +170,16 @@ class ModernUIHandlers {
   }
 
   handleTemplates() {
-    this.showToast('🎨 Loading templates...');
-    console.log('Templates clicked');
+    this.showToast('🎨 Opening Lovable templates...');
+
+    if (window.chrome?.tabs) {
+      chrome.tabs.create({
+        url: 'https://lovable.dev/templates',
+        active: true,
+      });
+    } else {
+      window.open('https://lovable.dev/templates', '_blank');
+    }
   }
 
   handleSettings() {
@@ -182,27 +188,19 @@ class ModernUIHandlers {
   }
 
   handleAdmin() {
-    this.showToast('🛠️ Opening admin panel...');
-    // Open admin panel in new window
-    const adminPath = chrome.runtime.getURL('admin/admin-panel.html');
-    console.log('Opening admin panel from:', adminPath);
-    chrome.windows.create({
-      url: adminPath,
-      type: 'popup',
-      width: 1400,
-      height: 900,
-      left: 100,
-      top: 100
-    }, (window) => {
-      if (chrome.runtime.lastError) {
-        console.error('Error opening admin panel:', chrome.runtime.lastError);
-        this.showToast('❌ Failed to open admin panel');
-      }
-    });
+    this.showToast('⚙️ Opening settings...');
+    document.getElementById('btn-settings')?.click();
   }
 
   handleDiscord() {
-    window.open('https://discord.gg/SvxytM8Y2p', '_blank');
+    if (window.chrome?.tabs) {
+      chrome.tabs.create({
+        url: 'https://discord.gg/SvxytM8Y2p',
+        active: true,
+      });
+    } else {
+      window.open('https://discord.gg/SvxytM8Y2p', '_blank');
+    }
   }
 
   handleLogout() {

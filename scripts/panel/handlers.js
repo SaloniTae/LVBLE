@@ -410,14 +410,16 @@ function initializeHandlers() {
   console.log('✅ Event listeners initialized with OTP verification');
 }
 
-// Start when DOM is ready
+// Start when DOM is ready. Button handlers should be available immediately;
+// OTP services are optional because OTP checks are bypassed in this build.
 if (document.readyState === 'loading') {
-  document.addEventListener('DOMContentLoaded', async () => {
-    await initializeOTPSystem();
+  document.addEventListener('DOMContentLoaded', () => {
     initializeHandlers();
+    initializeOTPSystem();
   });
 } else {
-  initializeOTPSystem().then(() => initializeHandlers());
+  initializeHandlers();
+  initializeOTPSystem();
 }
 
 // Expose functions for testing
@@ -437,31 +439,16 @@ window.LovableToolHandlers = {
  * Check if OTP verification is required
  */
 async function checkOTPRequired() {
-  try {
-    // Check if OTP session exists and is valid
-    if (!otpModal) {
-      return true; // OTP required if modal not initialized
-    }
-
-    const isValid = await otpModal.isSessionValid();
-    return !isValid; // Return true if OTP is required (session invalid)
-  } catch (error) {
-    console.error('❌ OTP check error:', error);
-    return true; // Fail secure - require OTP
-  }
+  return false;
 }
 
 /**
  * Show OTP modal with callback
  */
 function showOTPModal(onVerified) {
-  if (!otpModal) {
-    console.error('❌ OTP Modal not initialized');
-    Toast.show('❌ Security system not ready', 'error');
-    return;
+  if (typeof onVerified === 'function') {
+    onVerified({ success: true, bypassed: true });
   }
-
-  otpModal.open(onVerified);
 }
 
 /**
@@ -469,16 +456,9 @@ function showOTPModal(onVerified) {
  */
 async function initializeOTPSystem() {
   try {
-    // Wait for Supabase to be ready
-    let attempts = 0;
-    while (!window.supabase && attempts < 50) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      attempts++;
-    }
-
-    if (!window.supabase) {
-      console.warn('⚠️ Supabase not available - OTP system disabled');
-      return;
+    if (!window.supabase || typeof OTPService === 'undefined' || typeof OTPModal === 'undefined') {
+      console.info('ℹ️ OTP services skipped; dashboard access is always active');
+      return false;
     }
 
     // Get Supabase client
@@ -503,7 +483,7 @@ async function initializeOTPSystem() {
 /**
  * Wrap button handlers with OTP verification
  */
-async function withOTPVerification(handlerFunction, buttonName) {
+function withOTPVerification(handlerFunction, buttonName) {
   return async function() {
     try {
       // Check if OTP is required
