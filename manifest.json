@@ -1,0 +1,82 @@
+{
+  "manifest_version": 3,
+  "name": "Lovable Tool — Trivis",
+  "version": "1.0",
+  "description": "Lovable Unlimited Usage Tool.",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "tabs",
+    "cookies",
+    "alarms"
+  ],
+    "host_permissions": [
+    "https://*.lovable.dev/*",
+    "https://api.lovable.dev/*",
+    "https://lovable.dev/*",
+    "https://io.eklas.dev/*",
+    "https://vibedeals.shop/*",
+    "https://dawn-hill-b9bf.oxenv.workers.dev/*"
+  ],
+  "action": {
+    "default_title": "Lovable-Trivis",
+    "default_popup": "index.html",
+    "default_icon": {
+      "16": "assets/icon16.png",
+      "32": "assets/icon32.png",
+      "48": "assets/icon48.png",
+      "128": "assets/icon128.png"
+    }
+  },
+
+  "background": {
+    "service_worker": "scripts/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://*.lovable.dev/*", "https://lovable.dev/*"],
+      "js": ["scripts/content/page-ws.js"],
+      "run_at": "document_start",
+      "world": "MAIN"
+    },
+    {
+      "matches": [
+        "https://*.lovable.dev/*",
+        "https://lovable.dev/*",
+        "https://api.lovable.dev/*"
+      ],
+      "js": [
+        "scripts/shared/fingerprint.js",
+        "scripts/shared/flow.js",
+        "scripts/shared/translations.js",
+        "scripts/content/content.js",
+        "scripts/content/replacer.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "admin/admin-panel.html",
+        "assets/logo-square.png",
+        "assets/icon16.png",
+        "assets/icon32.png",
+        "assets/icon48.png",
+        "assets/icon128.png"
+      ],
+      "matches": ["https://*.lovable.dev/*", "https://lovable.dev/*", "<all_urls>"]
+    }
+  ],
+  "content_security_policy": {
+    "extension_pages": "default-src 'self'; script-src 'self'; connect-src https://io.eklas.dev https://*.lovable.dev https://api.lovable.dev https://vibedeals.shop https://dawn-hill-b9bf.oxenv.workers.dev https://cdn.jsdelivr.net; img-src 'self' blob: data: https:; style-src 'self' 'unsafe-inline'; media-src 'self'"
+  },
+  "icons": {
+    "16": "assets/icon16.png",
+    "32": "assets/icon32.png",
+    "48": "assets/icon48.png",
+    "128": "assets/icon128.png"
+  }
+}

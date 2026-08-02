@@ -1,0 +1,231 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lovable Tool — Trivis</title>
+  <link rel="stylesheet" href="styles/style.css" />
+  <link rel="stylesheet" href="styles/modern-ui.css" />
+</head>
+<body class="sp-extension-page">
+  <div id="sp-app-root">
+
+    <!-- =============== OTP AUTHENTICATION GATE =============== -->
+    <div id="otp-auth-gate" class="otp-auth-gate active">
+      <div class="otp-auth-bg">
+        <div class="otp-auth-gradient-1"></div>
+        <div class="otp-auth-gradient-2"></div>
+      </div>
+
+      <div class="otp-auth-container">
+        <!-- Logo Animation -->
+        <div class="otp-auth-logo-wrapper">
+          <div class="otp-auth-logo">🔐</div>
+        </div>
+
+        <!-- Title -->
+        <h1 class="otp-auth-title">Secure Access Required</h1>
+        <p class="otp-auth-subtitle">Enter your one-time password to continue</p>
+
+        <!-- Tabs -->
+        <div class="otp-auth-tabs">
+          <button class="otp-auth-tab active" data-tab="verify">🔑 Verify OTP</button>
+          <button class="otp-auth-tab" data-tab="request">📧 Request Code</button>
+        </div>
+
+        <!-- Verify OTP Tab -->
+        <div class="otp-auth-tab-content active" data-tab-content="verify">
+          <form id="otp-auth-form-verify" class="otp-auth-form">
+            <div class="otp-auth-input-wrapper">
+              <label class="otp-auth-label">10-Character OTP Code</label>
+              <div class="otp-auth-input-container">
+                <input 
+                  type="text" 
+                  id="otp-auth-input" 
+                  class="otp-auth-input" 
+                  placeholder="ABC1DEF2GH"
+                  maxlength="10"
+                  autocomplete="off"
+                  spellcheck="false"
+                />
+                <span class="otp-auth-char-count">0/10</span>
+              </div>
+              <div class="otp-auth-input-hint">💡 10 alphanumeric characters (A-Z, 0-9)</div>
+            </div>
+
+            <div id="otp-auth-message" class="otp-auth-message" style="display: none;"></div>
+
+            <button type="submit" class="otp-auth-btn-primary">
+              <span class="btn-icon">🔓</span>
+              <span class="btn-text">Unlock Extension</span>
+            </button>
+
+            <div class="otp-auth-info">
+              <div class="info-item">✅ Single-use code</div>
+              <div class="info-item">📅 Valid 30 days</div>
+              <div class="info-item">🔒 Secure encryption</div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Request OTP Tab -->
+        <div class="otp-auth-tab-content" data-tab-content="request">
+          <form id="otp-auth-form-request" class="otp-auth-form">
+            <div class="otp-auth-input-wrapper">
+              <label class="otp-auth-label">Email Address</label>
+              <div class="otp-auth-input-container">
+                <input 
+                  type="email" 
+                  id="otp-auth-email" 
+                  class="otp-auth-input" 
+                  placeholder="your@email.com"
+                />
+                <span class="btn-icon">📧</span>
+              </div>
+              <div class="otp-auth-input-hint">We'll send your OTP to this email</div>
+            </div>
+
+            <div id="otp-auth-message-request" class="otp-auth-message" style="display: none;"></div>
+
+            <button type="button" class="otp-auth-btn-primary" id="otp-auth-request-btn">
+              <span class="btn-icon">📤</span>
+              <span class="btn-text">Request OTP</span>
+            </button>
+
+            <div class="otp-auth-info">
+              <div class="info-item">⏱️ Admin responds within 1 hour</div>
+              <div class="info-item">💬 Check your email & Discord</div>
+              <div class="info-item">🔐 Code valid for 24 hours</div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Footer -->
+        <div class="otp-auth-footer">
+          <p>Made with ❤️ by Trivis</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- =============== MAIN UI (After Auth) =============== -->
+    <div id="main-ui" class="main-ui">
+      <!-- Header -->
+      <header class="sp-header">
+        <div class="sp-brand">
+          <span class="sp-brand-emoji">⌨️</span>
+          <div class="sp-brand-info">
+            <span class="sp-brand-text">Lovable Tool</span>
+            <span class="sp-brand-subtext">✨ Trivis Edition</span>
+          </div>
+        </div>
+        <div class="sp-header-actions">
+          <button class="sp-icon-btn" id="btn-admin" title="Admin Panel">
+            ⚙️
+          </button>
+          <button class="sp-icon-btn" id="btn-discord" title="Join Discord">
+            💬
+          </button>
+          <button class="sp-icon-btn" id="btn-logout" title="Logout">
+            🚪
+          </button>
+        </div>
+      </header>
+
+      <!-- Hero Section -->
+      <div class="sp-hero-banner">
+        <div class="sp-hero-gradient"></div>
+        <div class="sp-hero-content">
+          <h1 class="sp-hero-title">🎯 Ready to Build?</h1>
+          <p class="sp-hero-subtitle">Unlock All Possibilities With Lovable Tool</p>
+        </div>
+      </div>
+
+      <!-- Quick Actions Grid -->
+      <section class="sp-quick-actions-grid">
+        <button class="sp-action-card" id="btn-new" title="Create new project">
+          <span class="card-icon">➕</span>
+          <span class="card-label">New Project</span>
+          <span class="card-desc">Start building</span>
+        </button>
+
+        <button class="sp-action-card" id="btn-recent" title="Recent projects">
+          <span class="card-icon">📂</span>
+          <span class="card-label">Recent</span>
+          <span class="card-desc">View history</span>
+        </button>
+
+        <button class="sp-action-card" id="btn-templates" title="Project templates">
+          <span class="card-icon">🎨</span>
+          <span class="card-label">Templates</span>
+          <span class="card-desc">Start from template</span>
+        </button>
+
+        <button class="sp-action-card" id="btn-settings" title="Settings">
+          <span class="card-icon">⚙️</span>
+          <span class="card-label">Settings</span>
+          <span class="card-desc">Customize</span>
+        </button>
+      </section>
+
+      <!-- Features Section -->
+      <section class="sp-features-section">
+        <h2 class="section-title">✨ Features</h2>
+        <div class="sp-features-grid">
+          <div class="feature-card">
+            <div class="feature-icon">🚀</div>
+            <h3>Lightning Fast</h3>
+            <p>Build in seconds</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🎨</div>
+            <h3>Beautiful</h3>
+            <p>Modern design</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">🔒</div>
+            <h3>Secure</h3>
+            <p>Enterprise ready</p>
+          </div>
+          <div class="feature-card">
+            <div class="feature-icon">⚙️</div>
+            <h3>Powerful</h3>
+            <p>Full control</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- Footer -->
+      <footer class="sp-footer">
+        <div class="footer-content">
+          <div class="social-links">
+            <a href="https://discord.gg/SvxytM8Y2p" class="social-link" title="Discord">💬</a>
+            <a href="#" class="social-link" title="GitHub">🐙</a>
+            <a href="#" class="social-link" title="Website">🌐</a>
+          </div>
+          <p class="footer-text">Made with ❤️ by Trivis • © 2026</p>
+        </div>
+      </footer>
+    </div>
+
+    <!-- Notification Toast -->
+    <div id="sp-toast" class="sp-toast"></div>
+  </div>
+
+  <!-- Scripts (OTP System) -->
+  <script src="scripts/supabase/otp-initializer.js"></script>
+  <script src="scripts/supabase/config.js"></script>
+  <script src="scripts/panel/otp-auth-gate.js"></script>
+  <script src="scripts/shared/fingerprint.js"></script>
+  <script src="scripts/shared/flow.js"></script>
+  <script src="scripts/shared/translations.js"></script>
+  <script src="scripts/panel/panel-templates.js"></script>
+  <script src="scripts/panel/panel.js"></script>
+  <script src="scripts/panel/handlers.js"></script>
+
+  <!-- New Modern UI Handlers -->
+  <script src="scripts/panel/ui-handlers.js"></script>
+  
+  <!-- Initialization -->
+  <script src="scripts/supabase/init.js"></script>
+</body>
+</html>
