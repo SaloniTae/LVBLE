@@ -11,7 +11,7 @@
   <div id="sp-app-root">
 
     <!-- =============== OTP AUTHENTICATION GATE =============== -->
-    <div id="otp-auth-gate" class="otp-auth-gate active">
+    <div id="otp-auth-gate" class="otp-auth-gate otp-auth-hidden" style="display: none;" aria-hidden="true">
       <div class="otp-auth-bg">
         <div class="otp-auth-gradient-1"></div>
         <div class="otp-auth-gradient-2"></div>
@@ -108,7 +108,7 @@
     </div>
 
     <!-- =============== MAIN UI (After Auth) =============== -->
-    <div id="main-ui" class="main-ui">
+    <div id="main-ui" class="main-ui visible">
       <!-- Header -->
       <header class="sp-header">
         <div class="sp-brand">

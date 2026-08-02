@@ -8,24 +8,9 @@
   try {
     console.log('🚀 Extension initializing...');
 
-    // Wait for OTP system to be ready
-    let retries = 0;
-    while (!window.otpSystem && retries < 20) {
-      await new Promise(resolve => setTimeout(resolve, 100));
-      retries++;
-    }
-
-    if (!window.otpSystem) {
-      console.error('❌ OTP system failed to load');
-      alert('❌ Extension failed to initialize. Please reload.');
-      return;
-    }
-
-    console.log('✅ OTP system ready');
-
-    // Initialize Auth Gate
+    // OTP is bypassed for this build, so the dashboard unlocks immediately.
     const authGate = new OTPAuthGate();
-    await authGate.init(window.otpSystem);
+    await authGate.init(window.otpSystem || null);
     window.otpAuthGate = authGate;
 
     console.log('✅ Extension fully initialized');

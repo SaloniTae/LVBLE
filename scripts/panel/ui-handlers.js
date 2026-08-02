@@ -147,11 +147,17 @@ class ModernUIHandlers {
   }
 
   hideAuthGate() {
-    this.authGate.classList.add('hidden');
+    if (this.authGate) {
+      this.authGate.classList.add('hidden', 'otp-auth-hidden');
+      this.authGate.style.display = 'none';
+    }
   }
 
   showMainUI() {
-    this.mainUI.classList.add('visible');
+    if (this.mainUI) {
+      this.mainUI.classList.add('visible');
+      this.mainUI.style.display = 'flex';
+    }
   }
 
   // ========== MAIN UI HANDLERS ==========
@@ -200,13 +206,10 @@ class ModernUIHandlers {
   }
 
   handleLogout() {
-    this.showToast('👋 Logging out...');
-    
-    setTimeout(() => {
-      // Clear session
-      localStorage.removeItem('otp_session');
-      window.location.reload();
-    }, 800);
+    this.showToast('✅ Session remains active.');
+    window.otpAuthGate?.authenticate?.();
+    this.hideAuthGate();
+    this.showMainUI();
   }
 
   // ========== TOAST NOTIFICATIONS ==========
