@@ -209,6 +209,24 @@
 
     <!-- Notification Toast -->
     <div id="sp-toast" class="sp-toast"></div>
+
+    <!-- Settings Modal -->
+    <div id="sp-modal-settings" class="sp-modal sp-modal-hidden" aria-hidden="true">
+      <div class="sp-modal-overlay">
+        <div class="sp-modal-content" role="dialog" aria-modal="true" aria-labelledby="sp-settings-title">
+          <div class="sp-modal-header">
+            <h2 id="sp-settings-title">⚙️ Settings</h2>
+            <button id="close-settings" class="sp-modal-close" type="button" aria-label="Close settings">×</button>
+          </div>
+          <div id="sp-settings-body" class="sp-modal-body">
+            <div class="sp-settings-loading">
+              <span>✅ Session active</span>
+              <p>Dashboard access is unlocked and ready.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
   </div>
 
   <!-- Scripts (OTP System) -->
@@ -219,7 +237,7 @@
   <script src="scripts/shared/flow.js"></script>
   <script src="scripts/shared/translations.js"></script>
   <script src="scripts/panel/panel-templates.js"></script>
-  <script src="scripts/panel/panel.js"></script>
+  <!-- panel.js is intentionally not loaded; the static dashboard is wired by handlers.js. -->
   <script src="scripts/panel/handlers.js"></script>
 
   <!-- New Modern UI Handlers -->
