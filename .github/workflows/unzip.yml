@@ -2,7 +2,7 @@ name: Unzip and Replace Repo
 
 on:
   push:
-    branches: [main]
+    branches: [Trivis1]
     paths:
       - "**.zip"
   workflow_dispatch: # This adds the manual button to run the action from the UI
@@ -26,6 +26,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
         with:
+          ref: Trivis1
           fetch-depth: 0
           persist-credentials: true
 
@@ -49,7 +50,6 @@ jobs:
         if: steps.find_zip.outputs.zip_file != ''
         shell: bash
         env:
-          # FIXED: Used correct GitHub Actions expression syntax for the variable
           ZIP_FILE: ${{ steps.find_zip.outputs.zip_file }}
         run: |
           set -euo pipefail
@@ -85,8 +85,7 @@ jobs:
           set -euo pipefail
           shopt -s dotglob nullglob
           ENTRIES=(/tmp/extracted/*)
-          
-          # FIXED: If there is exactly one folder inside the ZIP, grab its contents instead
+
           if [ ${#ENTRIES[@]} -eq 1 ] && [ -d "${ENTRIES[0]}" ]; then
             echo "Flattening single top-level folder: ${ENTRIES[0]}"
             cp -a "${ENTRIES[0]}"/. "$GITHUB_WORKSPACE"/
@@ -94,7 +93,7 @@ jobs:
             echo "Copying root contents..."
             cp -a /tmp/extracted/. "$GITHUB_WORKSPACE"/
           fi
-          
+
           echo "---- Repo after extraction ----"
           ls -la
 
@@ -111,8 +110,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          
-          # DELETE any new workflows that came from the ZIP so GitHub doesn't block the push
+
           find .github/workflows -type f ! -name 'unzip.yml' -delete || true
 
           git config user.name  "github-actions[bot]"
@@ -123,4 +121,4 @@ jobs:
             exit 0
           fi
           git commit -m "[auto-unzip] Replace repo with extracted ZIP contents"
-          git push origin main
+          git push origin Trivis1
