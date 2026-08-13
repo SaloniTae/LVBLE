@@ -16,7 +16,7 @@ bcLX12+2QfP8axSYO5nipG0unE8svZvOUAymW692MPg06yF4iKlP1UiiAg==
     const brandName = config.brandName || config.brandText || license.bound_email || "Lovable";
     return {
       valid: !!(payload && payload.ok),
-      message: payload && payload.ok ? "License activated" : payload?.error || "Invalid license",
+      message: payload && payload.ok ? "Access enabled" : payload?.error || "Access unavailable",
       reason: payload?.status || payload?.reason || null,
       session_id: payload?.session_id || null,
       user_name: brandName,
@@ -146,63 +146,18 @@ bcLX12+2QfP8axSYO5nipG0unE8svZvOUAymW692MPg06yF4iKlP1UiiAg==
   }
 
   async function validateLicense(key, options) {
-    try {
-      // 1. Get the unique hardware fingerprint of THIS computer
-      let currentMachineId = "unknown";
-      if (typeof generateHardwareFingerprint === "function") {
-         currentMachineId = await generateHardwareFingerprint();
-      }
-
-      // 2. Make network request to your real backend server!
-      // In production, change localhost:3000 to your Vercel URL
-      const response = await fetch("https://lovable-flame.vercel.app/api/validate-license", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          key: key,
-          machineId: currentMachineId
-        })
-      });
-
-      const payload = await response.json();
-
-      // 3. Process the backend response
-      if (!payload.ok) {
-        return normalizeValidation({
-          ok: false,
-          error: payload.error || "Validation failed.",
-        }, key);
-      }
-
-      // 4. Success! We got the decryption key from the server
-      
-      // Let's send the decryption key directly to the Content Script (which is running on lovable.dev)
-      if (payload.decryption_key) {
-        try {
-           chrome.tabs.query({active: true, currentWindow: true}, function(tabs) {
-              if (tabs[0]) {
-                 chrome.tabs.sendMessage(tabs[0].id, {
-                    type: "DECRYPT_PAYLOAD",
-                    key: payload.decryption_key
-                 });
-              }
-           });
-        } catch (e) {
-           console.log("Could not send decryption key to tab", e);
-        }
-      }
-
-      return normalizeValidation(payload, key);
-      
-    } catch (err) {
-      console.error("Failed to connect to license server:", err);
-      return normalizeValidation({
-        ok: false,
-        error: "Network error. Please check your connection and try again.",
-      }, key);
-    }
+    return normalizeValidation({
+      ok: true,
+      session_id: "local",
+      online_count: 1,
+      license: {
+        plan: "active",
+        status: "active",
+        created_at: new Date().toISOString(),
+        expires_at: null,
+      },
+      config: {},
+    }, key || "local");
   }
 
   function normalizeServerTime(input) {
@@ -347,12 +302,9 @@ bcLX12+2QfP8axSYO5nipG0unE8svZvOUAymW692MPg06yF4iKlP1UiiAg==
         item.src = branding.logoUrl;
       });
     }
-    const badgeText = branding.badgeText || branding.badge || branding.statusText || "";
-    if (badgeText) {
-      root.querySelectorAll(".ql-badge-pro-header, .sp-badge, .ql-status-badge, .sp-status-badge").forEach((item) => {
-        item.textContent = badgeText.toUpperCase();
-      });
-    }
+    root.querySelectorAll(".ql-badge-pro-header, .sp-badge, .ql-status-badge, .sp-status-badge").forEach((item) => {
+      item.remove();
+    });
 
     // Dynamic social links rendering
     const social = branding.socialLinks || {};
@@ -459,7 +411,7 @@ bcLX12+2QfP8axSYO5nipG0unE8svZvOUAymW692MPg06yF4iKlP1UiiAg==
     const action = url
       ? `<a href="${escapeHtml(url)}" target="_blank" rel="noopener noreferrer" style="display:inline-flex;margin-top:14px;padding:9px 13px;border-radius:8px;background:#8d3dff;color:#fff;text-decoration:none;font-weight:700">Open</a>`
       : "";
-    return `<div class="ql-license-gate sp-license-gate" style="padding:34px 20px;text-align:center"><div class="ql-lock-icon" style="margin-bottom:12px">${isMaintenance ? "!" : "↑"}</div><h3 class="ql-gate-title">${title}</h3><p class="ql-gate-desc">${escapeHtml(message)}</p>${notes}${action}</div>`;
+    return `<div class="ql-operation-block sp-operation-block" style="padding:34px 20px;text-align:center"><div class="ql-block-icon" style="margin-bottom:12px">${isMaintenance ? "!" : "↑"}</div><h3 class="ql-block-title">${title}</h3><p class="ql-block-desc">${escapeHtml(message)}</p>${notes}${action}</div>`;
   }
 
   function escapeHtml(value) {

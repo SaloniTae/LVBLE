@@ -12,13 +12,7 @@ function activateBypass() {
   }, "*");
 }
 function deactivateBypass() {
-  try {
-    localStorage.removeItem("__ql_bypass_active");
-  } catch (value) {}
-  window.postMessage({
-    type: "qlBypassState",
-    active: false
-  }, "*");
+  activateBypass();
 }
 function buildSessionHeaders(projectId) {
   return new Promise(function (resolve) {
@@ -144,16 +138,27 @@ function euStoreLicenseState(licenseResponse) {
   return value;
 }
 function euApplyActiveBranding() {
-  chrome.storage.local.get(["eu_branding", "ql_branding", "eu_license_status", "ql_license_status"], input => {
+  chrome.storage.local.get(["eu_branding", "ql_branding"], input => {
     const value = input.eu_branding || input.ql_branding || {};
     if (window.EUBackend) {
-      const value2 = input.eu_license_status || input.ql_license_status || "";
-      const options = {
-        ...value
-      };
-      options.statusText = value2;
-      window.EUBackend.applyBranding(document, options);
+      window.EUBackend.applyBranding(document, { ...value, statusText: "" });
+      removeActivationUi(document);
     }
+  });
+}
+function removeActivationUi(root) {
+  const target = root || document;
+  target.querySelectorAll([
+    "#ql-logout-btn",
+    "#ql-trial-countdown",
+    ".ql-status-badge",
+    ".ql-badge-pro-header",
+    ".ql-badge-test",
+    ".ql-badge-pro",
+    ".sp-status-badge",
+    ".sp-badge",
+  ].join(",")).forEach(element => {
+    element.remove();
   });
 }
 function euRenderOperationBlock(element, operations) {
@@ -227,12 +232,10 @@ function createUI() {
   if (document.getElementById("ql-floating")) {
     return;
   }
-  chrome.storage.local.get(["ql_sidebar_mode", "ql_native_chat", "ql_license_valid"], input => {
+  chrome.storage.local.get(["ql_sidebar_mode", "ql_native_chat"], input => {
     if (input.ql_sidebar_mode === true) {
       qlRetryCount = qlRetryDelays.length;
-      if (input.ql_license_valid) {
-        activateBypass();
-      }
+      activateBypass();
       return;
     }
     if (input.ql_native_chat === true) {
@@ -269,10 +272,6 @@ function _buildFloatingUI() {
   element.addEventListener("click", function (event) {
     var value2 = event.target;
     while (value2 && value2 !== element) {
-      if (value2.id === "ql-validate-btn") {
-        validateLicense();
-        return;
-      }
       if (value2.id === "ql-sidepanel-btn") {
         _qlOpenSidePanel();
         return;
@@ -280,7 +279,7 @@ function _buildFloatingUI() {
       value2 = value2.parentElement;
     }
   });
-  chrome.storage.local.get(["ql_license_valid", "ql_license_key", "eu_license_valid", "eu_license_key", "eu_user_name", "eu_expires_at", "eu_activated_at", "eu_license_status", "eu_session_id", "ql_minimized", "ql_height", "ql_dark_mode", "ql_user_name", "ql_expires_at", "ql_activated_at", "ql_license_status", "ql_session_id"], async input => {
+  chrome.storage.local.get(["ql_minimized", "ql_height", "ql_dark_mode", "eu_user_name", "ql_user_name"], async input => {
     qlMinimized = input.ql_minimized || false;
     qlHeight = input.ql_height || 520;
     if (input.ql_dark_mode === false) {
@@ -289,166 +288,24 @@ function _buildFloatingUI() {
     if (qlMinimized) {
       element.classList.add("ql-minimized");
     }
-    const value2 = input.eu_license_key || input.ql_license_key;
-    const value3 = input.eu_license_valid || input.ql_license_valid;
-    if (value3) {
-      activateBypass();
-    }
     qlDeviceId = await getDeviceId();
-    const value4 = await new Promise(resolve => chrome.storage.local.get(["ql_sidebar_mode"], resolve));
-    if (value4.ql_sidebar_mode === true) {
-      if (value3) {
-        activateBypass();
-      }
-      return;
-    }
-    if (value3) {
-      qlUserName = input.eu_user_name || input.ql_user_name || null;
-      qlExpiresAt = input.eu_expires_at || input.ql_expires_at || null;
-      qlActivatedAt = input.eu_activated_at || input.ql_activated_at || null;
-      qlLicenseStatus = input.eu_license_status || input.ql_license_status || null;
-      qlSessionId = input.eu_session_id || input.ql_session_id || null;
-      showMainUI(element);
-      activateBypass();
-      euApplyActiveBranding();
-      if (value2 && Date.now() - _qlLastStartupHb > 5000) {
-        _qlLastStartupHb = Date.now();
-        const handler = input2 => {
-          const options = {
-            heartbeat: true,
-            deviceId: qlDeviceId
-          };
-          window.EUBackend.validateLicense(value2, options).then(error => {
-            console.log("[EU] Startup heartbeat (attempt " + input2 + "):", JSON.stringify(error));
-            if (error.valid) {
-              chrome.storage.local.set(euStoreLicenseState(error));
-              activateBypass();
-              const element2 = document.querySelector(".ql-profile-name");
-              if (element2) {
-                element2.textContent = qlUserName || "User";
-              }
-              updateTrialCountdown();
-              euApplyActiveBranding();
-              const element3 = document.getElementById("ql-floating");
-              if (element3) {
-                euCheckOperationBlock(element3);
-              }
-              euMaybeShowOptionalUpgrade(error.operations);
-            } else if (error.reason === "device_conflict") {
-              if (input2 < 2) {
-                setTimeout(() => handler(input2 + 1), 5000);
-                return;
-              }
-              chrome.storage.local.remove(window.EUBackend.clearKeys());
-              deactivateBypass();
-              const element2 = document.getElementById("ql-floating");
-              if (element2) {
-                showLicenseGate(element2);
-              }
-              setTimeout(() => showCustomAlert("Access Denied", error.message), 500);
-            } else if (error.reason === "rate_limited") {
-              if (input2 < 2) {
-                setTimeout(() => handler(input2 + 1), 30000);
-                return;
-              }
-            } else {
-              chrome.storage.local.remove(window.EUBackend.clearKeys());
-              deactivateBypass();
-              const element2 = document.getElementById("ql-floating");
-              if (element2) {
-                showLicenseGate(element2);
-              }
-            }
-          }).catch(() => {
-            if (input2 < 2) {
-              setTimeout(() => handler(input2 + 1), 10000);
-            }
-          });
-        };
-        handler(1);
-      }
-    } else {
-      deactivateBypass();
-      showLicenseGate(element);
-    }
+    qlUserName = input.eu_user_name || input.ql_user_name || "User";
+    qlExpiresAt = null;
+    qlActivatedAt = null;
+    qlLicenseStatus = "active";
+    qlSessionId = "local";
+    activateBypass();
+    showMainUI(element);
+    euApplyActiveBranding();
     setupDrag();
     setupResize();
   });
 }
-function showLicenseGate(element) {
-  element.innerHTML = templateLicenseGate(qlMinimized);
-  setTimeout(() => {
-    const element2 = document.getElementById("ql-buy-license-btn");
-    if (element2) {
-      element2.addEventListener("click", () => window.open("https://lovable.dev", "_blank", "noopener,noreferrer"));
-    }
-    setupMinimize();
-  }, 50);
-}
-async function validateLicense() {
-  const element = document.getElementById("ql-license-input");
-  const element2 = document.getElementById("ql-license-log");
-  const value = element ? element.value.trim().toUpperCase() : "";
-  if (!value) {
-    if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "⚠ Enter a key";
-    }
-    return;
-  }
-  if (element2) {
-    element2.className = "ql-log-info";
-    element2.innerHTML = SVG_ICONS.clock + " Validating...";
-  }
-  try {
-    if (!qlDeviceId) {
-      qlDeviceId = await getDeviceId();
-    }
-    const options = {
-      deviceId: qlDeviceId
-    };
-    const value2 = await window.EUBackend.validateLicense(value, options);
-    if (value2.valid) {
-      qlExpiredHandled = false;
-      const value3 = euStoreLicenseState(value2);
-      chrome.storage.local.set(value3, () => {
-        activateBypass();
-        if (element2) {
-          element2.className = "ql-log-success";
-          element2.innerText = "✓ " + value2.message;
-        }
-        try {
-          if (typeof QLSounds !== "undefined") {
-            QLSounds.activation();
-          }
-        } catch (value4) {}
-        setTimeout(() => {
-          const element3 = document.getElementById("ql-floating");
-          if (element3) {
-            if (!euRenderOperationBlock(element3, value2.operations)) {
-              showMainUI(element3);
-            }
-            euApplyActiveBranding();
-            euMaybeShowOptionalUpgrade(value2.operations);
-          }
-          startHeartbeat(value);
-        }, 800);
-      });
-    } else if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "✗ " + value2.message;
-    }
-  } catch (value2) {
-    if (element2) {
-      element2.className = "ql-log-error";
-      element2.innerText = "✗ Connection error";
-    }
-  }
-}
 function showMainUI(element) {
   const value = qlUserName || "User";
-  const value2 = String(qlLicenseStatus).toLowerCase() === "trial" ? "<span class=\"ql-status-badge ql-badge-test\">TEST</span>" : "<span class=\"ql-status-badge ql-badge-pro\">ACTIVE</span>";
+  const value2 = "";
   element.innerHTML = templateMainUI(value, value2, qlMinimized);
+  removeActivationUi(element);
   euCheckOperationBlock(element);
   element.style.height = qlHeight + "px";
   setTimeout(() => {
@@ -459,7 +316,7 @@ function showMainUI(element) {
     setupMinimize();
     setupSuggestionChips();
     setupWatermarkButton();
-    updateTrialCountdown();
+    removeActivationUi(element);
     setupDrag();
     setupResize();
     setupDarkMode();
@@ -476,35 +333,12 @@ function showMainUI(element) {
     setupDownloadProject();
     checkForUpdatePopup();
     checkResellerRolePopup();
-    chrome.storage.local.get(["eu_license_key", "eu_session_id", "ql_license_key", "ql_session_id"], input => {
-      const value3 = input.eu_license_key || input.ql_license_key;
-      if (value3) {
-        qlSessionId = input.eu_session_id || input.ql_session_id || qlSessionId;
-        startHeartbeat(value3);
-      }
-    });
+    qlSessionId = qlSessionId || "local";
     var element2 = document.getElementById("ql-sidepanel-btn");
     if (element2) {
       element2.addEventListener("click", function (event) {
         event.stopPropagation();
         _qlOpenSidePanel();
-      });
-    }
-    const element3 = document.getElementById("ql-logout-btn");
-    if (element3) {
-      element3.addEventListener("click", () => {
-        if (qlHeartbeatInterval) {
-          clearInterval(qlHeartbeatInterval);
-        }
-        chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-          deactivateBypass();
-          qlUserName = null;
-          qlExpiresAt = null;
-          qlActivatedAt = null;
-          qlLicenseStatus = null;
-          qlSessionId = null;
-          showLicenseGate(element);
-        });
       });
     }
   }, 30);
@@ -775,47 +609,9 @@ function setupWatermarkButton() {
   });
 }
 function updateTrialCountdown() {
-  if (!qlExpiresAt) {
-    return;
-  }
-  const element = document.getElementById("ql-trial-countdown");
-  if (!element) {
-    return;
-  }
-  element.style.display = "block";
-  const value = Date.now();
-  function value2() {
-    const value3 = new Date(qlExpiresAt).getTime();
-    const value4 = Math.max(value3 - value, 3600000);
-    const value5 = value3 - Date.now();
-    if (value5 <= 0) {
-      element.innerHTML = "<span class=\"ql-countdown-expired\">" + t("countdown.expired") + "</span><div class=\"ql-trial-bar\"><div class=\"ql-trial-bar-fill ql-bar-expired\" style=\"width:0%\"></div></div>";
-      handleLicenseExpired();
-      return;
-    }
-    const value6 = Math.floor(value5 / 86400000);
-    const value7 = Math.floor(value5 % 86400000 / 3600000);
-    const value8 = Math.floor(value5 % 3600000 / 60000);
-    const value9 = Math.floor(value5 % 60000 / 1000);
-    const value10 = Math.max(0, Math.min(100, value5 / value4 * 100));
-    let text = "";
-    if (value6 > 0) {
-      text = value6 + "d " + value7 + "h " + value8 + "m";
-    } else if (value7 > 0) {
-      text = value7 + "h " + value8 + "m " + String(value9).padStart(2, "0") + "s";
-    } else {
-      text = value8 + ":" + String(value9).padStart(2, "0");
-    }
-    const value11 = value10 < 20 ? " ql-bar-urgent" : "";
-    const value12 = qlLicenseStatus === "trial" ? t("countdown.trial") : t("countdown.license");
-    element.innerHTML = "<div class=\"ql-countdown-row\"><span class=\"ql-countdown-icon\">" + SVG_ICONS.clock + "</span><span class=\"ql-countdown-label\">" + value12 + "</span><span class=\"ql-countdown-time\">" + text + "</span></div><div class=\"ql-trial-bar\"><div class=\"ql-trial-bar-fill" + value11 + "\" style=\"width:" + value10 + "%\"></div></div>";
-  }
-  value2();
-  if (window.qlCountdownInterval) {
-    clearInterval(window.qlCountdownInterval);
-  }
-  window.qlCountdownInterval = setInterval(value2, 1000);
+  removeActivationUi(document);
 }
+
 function setupMinimize() {
   const element = document.getElementById("ql-minimize");
   if (!element) {
@@ -1036,113 +832,16 @@ function removeShieldOverlay() {
 let qlHbConflictCount = 0;
 let qlHbNetworkFailCount = 0;
 function startHeartbeat(licenseKey) {
-  if (qlHeartbeatInterval) {
-    clearInterval(qlHeartbeatInterval);
-  }
-  qlHbConflictCount = 0;
-  qlHbNetworkFailCount = 0;
-  qlHeartbeatInterval = setInterval(async () => {
-    try {
-      const options = {
-        heartbeat: true,
-        deviceId: qlDeviceId
-      };
-      const value = await window.EUBackend.validateLicense(licenseKey, options);
-      if (!value.valid) {
-        const value2 = value.reason === "device_conflict";
-        const value3 = value.reason === "expired" || value.reason === "suspended" || value.message && (value.message.includes("expired") || value.message.includes("suspended"));
-        if (value2) {
-          qlHbConflictCount++;
-          if (qlHbConflictCount < 2) {
-            return;
-          }
-        }
-        if (value2 || value3) {
-          clearInterval(qlHeartbeatInterval);
-          deactivateBypass();
-          chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-            const element3 = document.getElementById("ql-floating");
-            if (element3) {
-              showLicenseGate(element3);
-            }
-            if (value2) {
-              setTimeout(() => showCustomAlert("Access Denied", value.message), 500);
-            }
-          });
-        }
-        return;
-      }
-      qlHbConflictCount = 0;
-      qlHbNetworkFailCount = 0;
-      activateBypass();
-      qlOnlineCount = value.online_count || 0;
-      const element = document.getElementById("ql-online-count");
-      if (element) {
-        element.textContent = qlOnlineCount;
-      }
-      chrome.storage.local.set(euStoreLicenseState(value));
-      const element2 = document.getElementById("ql-floating");
-      if (element2 && euRenderOperationBlock(element2, value.operations)) {
-        return;
-      }
-      euApplyActiveBranding();
-      euMaybeShowOptionalUpgrade(value.operations);
-      if (value.user_name) {
-        qlUserName = value.user_name;
-        const options2 = {
-          ql_user_name: qlUserName
-        };
-        chrome.storage.local.set(options2);
-        const element3 = document.querySelector(".ql-profile-name");
-        if (element3) {
-          element3.textContent = value.user_name;
-        }
-      }
-    } catch (value) {
-      console.warn("[QL] Heartbeat error", value);
-      qlHbNetworkFailCount++;
-      if (qlHbNetworkFailCount >= 5) {
-        deactivateBypass();
-        qlHbNetworkFailCount = 0;
-      }
-    }
-  }, 60000);
+  activateBypass();
 }
+
 let qlExpiredHandled = false;
 function handleLicenseExpired() {
-  if (qlExpiredHandled) {
-    return;
-  }
-  qlExpiredHandled = true;
-  if (qlHeartbeatInterval) {
-    clearInterval(qlHeartbeatInterval);
-  }
-  if (window.qlCountdownInterval) {
-    clearInterval(window.qlCountdownInterval);
-  }
-  const element = document.createElement("div");
-  element.className = "ql-sweetalert-overlay";
-  element.innerHTML = templateExpiredOverlay();
-  const element2 = document.getElementById("ql-floating");
-  if (element2) {
-    element2.appendChild(element);
-  }
-  requestAnimationFrame(() => element.classList.add("ql-sweetalert-visible"));
-  const element3 = element.querySelector("#ql-sweetalert-close");
-  if (element3) {
-    element3.addEventListener("click", () => {
-      element.classList.remove("ql-sweetalert-visible");
-      setTimeout(() => {
-        element.remove();
-        chrome.storage.local.remove(window.EUBackend.clearKeys(), () => {
-          if (element2) {
-            showLicenseGate(element2);
-          }
-        });
-      }, 300);
-    });
-  }
+  qlExpiredHandled = false;
+  qlExpiresAt = null;
+  activateBypass();
 }
+
 function qlBootstrap() {
   if (document.getElementById("ql-floating")) {
     return;
@@ -1658,26 +1357,75 @@ chrome.runtime.onMessage.addListener(function (error, option2, option3) {
     return true;
   }
 });
+
+function getLovableChatForm() {
+  return document.querySelector("form#chat-input") || document.querySelector("form:has([contenteditable=\"true\"])") || document.querySelector("[data-testid*=\"chat\" i] form");
+}
+function getLovableChatEditor(form) {
+  const root = form || document;
+  return root.querySelector('[contenteditable="true"]') || root.querySelector('textarea:not([disabled])');
+}
+function getLovableSendButton(form) {
+  const root = form || document;
+  const selectors = [
+    "#chatinput-send-message-button",
+    'button[type="submit"]',
+    'button[aria-label*="send" i]',
+    'button[title*="send" i]',
+    'button[data-testid*="send" i]',
+    'button:has(svg)'
+  ];
+  for (const selector of selectors) {
+    try {
+      const button = root.querySelector(selector) || document.querySelector(selector);
+      if (button && button.offsetParent !== null) {
+        return button;
+      }
+    } catch (value) {}
+  }
+  const buttons = Array.from(root.querySelectorAll("button")).concat(Array.from(document.querySelectorAll("button")));
+  return buttons.find(button => /send|submit|arrow/i.test((button.getAttribute("aria-label") || "") + " " + (button.title || "") + " " + (button.textContent || ""))) || null;
+}
+async function waitForLovableSendButton(form, timeoutMs = 2500) {
+  const started = Date.now();
+  let button = getLovableSendButton(form);
+  while (!button && Date.now() - started < timeoutMs) {
+    await new Promise(resolve => setTimeout(resolve, 100));
+    button = getLovableSendButton(form);
+  }
+  return button;
+}
+function setLovableEditorText(editor, message) {
+  editor.focus();
+  if (editor.isContentEditable) {
+    document.execCommand("selectAll", false, null);
+    document.execCommand("insertText", false, message);
+    editor.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "insertText", data: message }));
+  } else {
+    editor.value = message;
+    editor.dispatchEvent(new Event("input", { bubbles: true }));
+    editor.dispatchEvent(new Event("change", { bubbles: true }));
+  }
+}
+
 async function quickProjectInit() {
   if (window.location.pathname.match(/\/projects\/[a-f0-9-]{36}/i)) {
     throw new Error("Use this button on the Lovable home screen, with no project open.");
   }
-  const element = document.querySelector("form#chat-input");
+  const element = getLovableChatForm();
   if (!element) {
     throw new Error("Form not found. Make sure you are on the Lovable home screen.");
   }
-  const element2 = element.querySelector("[contenteditable=\"true\"]");
+  const element2 = getLovableChatEditor(element);
   if (!element2) {
     throw new Error("Text field not found.");
   }
-  const element3 = document.getElementById("chatinput-send-message-button");
-  if (!element3) {
-    throw new Error("Create button not found.");
-  }
-  element2.focus();
-  document.execCommand("selectAll", false, null);
-  document.execCommand("insertText", false, ".");
+  setLovableEditorText(element2, ".");
   await new Promise(resolve => setTimeout(resolve, 300));
+  const element3 = await waitForLovableSendButton(element);
+  if (!element3) {
+    throw new Error("Create/send button not found. Lovable may still be loading.");
+  }
   if (element3.disabled) {
     element3.removeAttribute("disabled");
   }
@@ -1863,15 +1611,6 @@ function setupFileAttachment() {
     if (!items.length) {
       return;
     }
-    const value = await new Promise(resolve => chrome.storage.local.get(["lovable_token"], resolve));
-    let value2 = value.lovable_token || "";
-    if (!value2) {
-      showCustomAlert("Error", "Token not captured. Navigate in Lovable to sync.");
-      return;
-    }
-    if (value2.startsWith("Bearer ")) {
-      value2 = value2.slice(7);
-    }
     const handler = async input => {
       const value3 = await input.slice(0, 12).arrayBuffer();
       const value4 = new Uint8Array(value3);
@@ -1905,51 +1644,69 @@ function setupFileAttachment() {
         value5 = value9.file;
         value6 = value9.previewUrl;
       }
-      const value7 = isImageType(value5.type);
-      const value8 = qlAttachedFiles.length;
       qlAttachedFiles.push({
-        file_id: null,
+        file_id: "native_" + crypto.randomUUID(),
         file_name: value3.name,
         previewUrl: value6,
         file_type: value5.type,
         sizeLabel: formatFileSize(value5.size),
-        uploading: true,
+        uploading: false,
+        uploadFailed: false,
         rawFile: value5
       });
       renderAttachPreview();
-      try {
-        const value9 = await uploadFileDirect(value5, value2);
-        qlAttachedFiles[value8].file_id = value9.file_id;
-        qlAttachedFiles[value8].public_url = value9.public_url;
-        qlAttachedFiles[value8].uploading = false;
-        renderAttachPreview();
-      } catch (value9) {
-        console.warn("[QL Upload] Failed to upload to storage:", value9.message);
-        qlAttachedFiles[value8].uploading = false;
-        qlAttachedFiles[value8].uploadFailed = true;
-        renderAttachPreview();
-        showCustomAlert("Upload Error", "Could not upload the image: " + (value9.message || "unknown error"));
-      }
     }
   });
 }
-async function sendNativeToLovable(message) {
-  const element = document.querySelector("form#chat-input");
+function getLovableFileInput(form) {
+  const root = form || document;
+  const selectors = [
+    'input[type="file"][accept*="image" i]',
+    'input[type="file"][multiple]',
+    'input[type="file"]'
+  ];
+  for (const selector of selectors) {
+    const input = root.querySelector(selector) || document.querySelector(selector);
+    if (input) {
+      return input;
+    }
+  }
+  return null;
+}
+function attachFilesToLovableForm(form, files) {
+  const attachableFiles = (files || []).filter(Boolean);
+  if (!attachableFiles.length) {
+    return false;
+  }
+  const input = getLovableFileInput(form);
+  if (!input) {
+    throw new Error("Lovable attachment input not found. Open the standard Lovable chat and try again.");
+  }
+  const dataTransfer = new DataTransfer();
+  attachableFiles.forEach(file => dataTransfer.items.add(file));
+  input.files = dataTransfer.files;
+  input.dispatchEvent(new Event("input", { bubbles: true }));
+  input.dispatchEvent(new Event("change", { bubbles: true }));
+  return true;
+}
+async function sendNativeToLovable(message, files) {
+  const element = getLovableChatForm();
   if (!element) {
     throw new Error("Lovable chat not found. Open a project.");
   }
-  const element2 = element.querySelector("[contenteditable=\"true\"]");
+  const element2 = getLovableChatEditor(element);
   if (!element2) {
     throw new Error("Chat editor not found on the page.");
   }
-  const element3 = document.getElementById("chatinput-send-message-button");
-  if (!element3) {
-    throw new Error("please wait");
+  setLovableEditorText(element2, message);
+  if (files && files.length) {
+    attachFilesToLovableForm(element, files);
   }
-  element2.focus();
-  document.execCommand("selectAll", false, null);
-  document.execCommand("insertText", false, message);
-  await new Promise(resolve => setTimeout(resolve, 200));
+  await new Promise(resolve => setTimeout(resolve, files && files.length ? 700 : 300));
+  const element3 = await waitForLovableSendButton(element);
+  if (!element3) {
+    throw new Error("Send button not found. Lovable may still be loading.");
+  }
   const value = element3.disabled;
   if (value) {
     element3.removeAttribute("disabled");
@@ -1976,17 +1733,11 @@ function setupSend() {
       return;
     }
     const filteredItems = qlAttachedFiles.filter(function (item) {
-      return item.public_url && !item.uploading && !item.uploadFailed;
+      return item.rawFile && !item.uploading && !item.uploadFailed;
     });
     const value2 = filteredItems.length > 0;
     var value3 = value;
-    if (value2) {
-      var value4 = filteredItems.map(function (item) {
-        return item.public_url;
-      }).join("\n");
-      var value5 = filteredItems.length > 1 ? "Attached files:\n" : "Attached file: ";
-      value3 = value + "\n\n" + value5 + value4;
-    }
+    const nativeFiles = filteredItems.map(item => item.rawFile);
     try {
       if (element3) {
         element3.className = "ql-log-info";
@@ -1994,7 +1745,7 @@ function setupSend() {
       }
       element.classList.add("ql-sending");
       element.disabled = true;
-      await sendNativeToLovable(value3);
+      await sendNativeToLovable(value3, nativeFiles);
       if (element3) {
         element3.className = "ql-log-success";
         element3.innerText = value2 ? "✓ Prompt sent!" : "✓ Prompt sent!";
@@ -2239,17 +1990,6 @@ async function handleFilesAttach(files) {
     showCustomAlert("Limit", "Maximo " + MAX_FILES + " files.");
     return;
   }
-  var value = await new Promise(function (resolve) {
-    chrome.storage.local.get(["lovable_token"], resolve);
-  });
-  var value2 = value.lovable_token || "";
-  if (!value2) {
-    showCustomAlert("Error", "Token not captured.");
-    return;
-  }
-  if (value2.indexOf("Bearer ") === 0) {
-    value2 = value2.slice(7);
-  }
   for (var count = 0; count < files.length; count++) {
     var value3 = files[count];
     if (qlAttachedFiles.length >= MAX_FILES) {
@@ -2266,28 +2006,17 @@ async function handleFilesAttach(files) {
       value4 = value6.file;
       value5 = value6.previewUrl;
     }
-    var value7 = qlAttachedFiles.length;
     qlAttachedFiles.push({
-      file_id: null,
+      file_id: "native_" + crypto.randomUUID(),
       file_name: value3.name || "file_" + Date.now(),
       previewUrl: value5,
       file_type: value4.type,
       sizeLabel: formatFileSize(value4.size),
-      uploading: true,
+      uploading: false,
+      uploadFailed: false,
       rawFile: value4
     });
     renderAttachPreview();
-    try {
-      var value8 = await uploadFileDirect(value4, value2);
-      qlAttachedFiles[value7].file_id = value8.file_id;
-      qlAttachedFiles[value7].uploading = false;
-      renderAttachPreview();
-    } catch (value9) {
-      qlAttachedFiles[value7].uploading = false;
-      qlAttachedFiles[value7].file_id = "local_direct_" + crypto.randomUUID();
-      qlAttachedFiles[value7].uploadFailed = true;
-      renderAttachPreview();
-    }
   }
   showCustomAlert("Attached 📎", files.length + " file(s) added!");
 }
@@ -2497,7 +2226,7 @@ function deactivateNativeChat() {
   if (element2) {
     element2.remove();
   }
-  const element3 = document.getElementById("chatinput-send-message-button");
+  const element3 = getLovableSendButton(document.querySelector("form#chat-input"));
   if (element3) {
     element3.classList.remove("ql-native-send-active");
     element3.style.animation = "";
@@ -2545,7 +2274,7 @@ function injectNativeChatOverlay() {
     });
     element.parentElement.insertBefore(element3, element.nextSibling);
   }
-  const element2 = document.getElementById("chatinput-send-message-button");
+  const element2 = getLovableSendButton(element);
   if (element2) {
     element2.classList.add("ql-native-send-active");
   }
