@@ -1,0 +1,34 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Soil and Moisture Conservation — Parallax Slides</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <nav class="deck-nav" aria-label="Slide navigation">
+      <a class="brand" href="#slide-01">SMC Odisha</a>
+      <div class="nav-actions">
+        <button id="prevSlide" type="button">Prev</button>
+        <span id="slideCounter">01 / 25</span>
+        <button id="nextSlide" type="button">Next</button>
+      </div>
+    </nav>
+
+    <main id="deck" class="deck" aria-label="Soil and Moisture Conservation parallax slide deck"></main>
+
+    <template id="slideTemplate">
+      <section class="slide">
+        <div class="layer layer-bg" data-depth="0.10"></div>
+        <div class="layer layer-mid" data-depth="0.42"></div>
+        <div class="layer layer-fg" data-depth="0.82"></div>
+        <div class="atmosphere" aria-hidden="true"></div>
+        <article class="copy-panel"></article>
+      </section>
+    </template>
+
+    <script src="slides.js"></script>
+    <script src="parallax.js"></script>
+  </body>
+</html>
